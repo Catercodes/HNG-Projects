@@ -1,47 +1,62 @@
-
 from flask import Flask, request, jsonify
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-# Function to get the location and temperature
-def get_location_and_temperature(ip):
-    # Example IP Geolocation API (free but might require registration for an API key)
-    ip_info_url = f"http://ipinfo.io/{ip}/json"
-    response = requests.get(ip_info_url)
-    data = response.json()
+# Load API keys from environment variables
+LOCATION_API_KEY = os.getenv('LOCATION_API_KEY', 'AIzaSyBAk-JHCSX1XWfzgedBFlamrZc3fOZjYYk')  # Your Google Geocoding API key
+WEATHER_API_KEY = os.getenv('WEATHER_API_KEY', '5e81005fb4770111451f7fe8f3ebdaae')           # Your OpenWeatherMap API key
 
+@app.route('/')
+def index():
+    return "Welcome to my Flask API!"
 
-    city = data.get('city', 'New York')
+@app.route('/api/location', methods=['GET'])
+def get_location_and_weather():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-    weather_api_key = '6eac1c3b94b30c0a0658661b8e02c2c9:'
-    weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={weather_api_key}&units=metric"
+    # Get location data using Google Geocoding API
+    location_url = f'https://maps.googleapis.com/maps/api/geocode/json?key={LOCATION_API_KEY}&sensor=false&latlng=40.730610,-73.935242'
+    location_response = requests.get(location_url)
+    location_data = location_response.json()
+
+    # Extract city and coordinates
+    if location_data['status'] == 'OK':
+        results = location_data['results'][0]
+        for component in results['address_components']:
+            if 'locality' in component['types']:
+                city = component['long_name']
+                break
+        else:
+            city = 'Unknown City'
+        
+        latitude = results['geometry']['location']['lat']
+        longitude = results['geometry']['location']['lng']
+    else:
+        city = 'Unknown City'
+        latitude = 0.0
+        longitude = 0.0
+
+    # Get weather data from OpenWeatherMap
+    weather_url = f'https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={WEATHER_API_KEY}&units=metric'
     weather_response = requests.get(weather_url)
     weather_data = weather_response.json()
 
     # Extract temperature
-    temperature = weather_data['main']['temp'] if 'main' in weather_data else '11'
+    temperature = weather_data.get('main', {}).get('temp', 'N/A')
 
-    return city, temperature
+    # Create greeting message
+    greeting = f"Hello, Mark!, the temperature is {temperature} degrees Celsius in {city}"
 
-@app.route('/')
-def hello():
-    visitor_name = request.args.get('visitor_name', 'Guest')
-
-    # Get the client's IP address
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-
-    # Get the location and temperature based on IP
-    city, temperature = get_location_and_temperature(client_ip)
-
-    # Create the response
-    response = {
+    return jsonify({
         "client_ip": client_ip,
         "location": city,
-        "greeting": f"Hello, {visitor_name}!, the temperature is {temperature} degrees Celsius in {city}"
-    }
-    return jsonify(response)
+        "greeting": greeting
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
-
