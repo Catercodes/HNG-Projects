@@ -1,12 +1,14 @@
 from flask import Flask, jsonify, request
 import requests
+import os
 
 app = Flask(__name__)
 
 # Free APIs for geolocation and weather data
 GEOLOCATION_API_URL = "http://ip-api.com/json/"
-WEATHER_API_URL = "http://api.openweathermap.org/data/2.5/weather"
-WEATHER_API_KEY = "6eac1c3b94b30c0a0658661b8e02c2c9"  # Replace with your OpenWeatherMap API key
+WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')  # Replace with your OpenWeatherMap API key
+
+WEATHER_API_URL = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q=city"
 
 @app.route('/')
 def index():
@@ -18,16 +20,23 @@ def get_geolocation(ip):
         ip ='8.8.8.8'
 
     response = requests.get(GEOLOCATION_API_URL + ip)
-    return response.json()
+    if response is None:
+        return
+    data = response.json()
+    return data['city']
 
 def get_weather(city):
-    params = {
-        'q': city,
-        'appid': WEATHER_API_KEY,
-        'units': 'metric'  # Get temperature in Celsius
-    }
-    response = requests.get(WEATHER_API_URL, params=params)
-    return response.json()
+    #params = {
+    #   'q': city,
+    #    'appid': WEATHER_API_KEY,
+    #    'units': 'metric'  # Get temperature in Celsius
+    #}
+    response = requests.get(f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={city}")
+    if response is None:
+        return None
+    data = response.json()
+    current = data.get('current')
+    return current['temp_c']
 
 @app.route('/api/hello', methods=['GET'])
 def hello():
@@ -37,12 +46,13 @@ def hello():
     client_ip = request.remote_addr
 
     # Get geolocation information
-    geo_info = get_geolocation(client_ip)
-    city = geo_info.get('city', 'Unknown')
+    city = get_geolocation(client_ip)
+    #city = geo_info.get('city', 'Unknown')
 
     # Get weather information
-    weather_info = get_weather(city)
-    temperature = weather_info['main']['temp'] if 'main' in weather_info else 'Unknown'
+    #weather_info = get_weather(city)
+    temperature = get_weather(city)
+    #temperature = weather_info['main']['temp'] if 'main' in weather_info else 'Unknown'
 
     greeting = f"Hello, {visitor_name}!, the temperature is {temperature} degrees Celsius in {city}"
 
